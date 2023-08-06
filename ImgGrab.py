@@ -3,12 +3,15 @@ from PIL import ImageTk,Image,ImageGrab
 import numpy as np
 import win32clipboard as clip
 from io import BytesIO
-import win32con
+import win32con,win32gui
+import os
 
 dragging=False
 Img = None
 SelectedRegion = None
 L,T=0,0
+PATH = ''
+isCtrlPressed = False
 
 def correct(x1,y1,x2,y2):
     return (min(x1,x2),min(y1,y2),max(x1,x2),max(y1,y2))
@@ -70,14 +73,29 @@ def PhotoMoveStart(e):
     dragging = True
     L,T=e.x,e.y
 
+def PathFromExplorer():
+    Hwnd = win32gui.WindowFromPoint(win32gui.GetCursorPos())
+    if win32gui.GetClassName(Hwnd) == 'SysListView32' and win32gui.GetWindowText(Hwnd) == 'FolderView':
+        return os.path.join(os.path.expanduser("~"), 'Desktop')
+    try:
+        Hwnd = win32gui.GetParent(win32gui.GetParent(win32gui.GetParent(win32gui.GetParent(win32gui.GetParent(win32gui.GetParent(Hwnd))))))
+    except:
+        return ''
+    find = lambda h,cn:win32gui.FindWindowEx(h,None,cn,None)
+    _hwnd = find(find(find(find(find(find(Hwnd,"WorkerW"),"ReBarWindow32"),"Address Band Root"),"msctls_progress32"),"Breadcrumb Parent"),"ToolbarWindow32")
+    return win32gui.GetWindowText(_hwnd)[4:]
+
 def PhotoMoving(e):
     if dragging:
         global L,T
         win.geometry(f'+{e.x_root-L}+{e.y_root-T}')
 
 def PhotoMoveStop(e):
-    global dragging
+    global dragging,PATH,isCtrlPressed
     dragging = False
+    if isCtrlPressed:
+        Img.save(PATH+'\\MyPhoto.png')
+        isCtrlPressed = False
 
 def toBMP(img:Image):
     buff = BytesIO()
@@ -91,6 +109,14 @@ def ClipImage(img:Image):
     clip.EmptyClipboard()
     clip.SetClipboardData(win32con.CF_DIB, toBMP(img))
     clip.CloseClipboard()
+
+def savePhotoStart(e):
+    global isCtrlPressed
+    isCtrlPressed = True
+    
+def savingPhoto(e):
+    global PATH
+    PATH = PathFromExplorer()
 
 def Show(img:Image):
     if not img:
@@ -111,7 +137,9 @@ def Show(img:Image):
     win.bind('<B1-Motion>',PhotoMoving)
     win.bind('<ButtonRelease-1>',PhotoMoveStop)
     win.bind('<Double-Button-1>',w_quit)
-    
+    win.bind('<Control-Button-1>',savePhotoStart)
+    win.bind('<Control-B1-Motion>',savingPhoto)
+
     win.mainloop()
 
 if __name__=='__main__':
